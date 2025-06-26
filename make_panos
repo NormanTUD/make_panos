@@ -411,7 +411,6 @@ def stitch_image_group(images, progress, output_dir="."):
     jpg_name = f"pano_{hash_str}.jpg"
     jpg_path = os.path.join(output_dir, jpg_name)
 
-    dier(jpg_path)
     if os.path.exists(jpg_path):
         console.print(f"i [yellow]Die Datei {jpg_path} existiert bereits.[/yellow]")
         return
