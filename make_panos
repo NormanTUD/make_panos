@@ -1,9 +1,13 @@
 #!/bin/env python3
 
 import os
-import subprocess
-import platform
-import sys
+try:
+    import subprocess
+    import platform
+    import sys
+except KeyboardInterrupt:
+    print("You pressed CTRL-c")
+    sys.exit(0)
 
 try:
     import venv
@@ -465,6 +469,10 @@ def stitch_image_group(images, progress, output_dir="."):
 
     console.rule(f"🧵 Gruppe mit {len(images)} Bildern → Hash: [cyan]{hash_str}[/cyan]")
 
+    if args.max_group_nr > len(images):
+        console.print(f"Image group too large: {len(images)}")
+        return
+
     steps = [
         ("pto_gen", ["pto_gen", *images, "-o", pto]),
         ("cpfind", ["cpfind", "--multirow", "-o", pto, pto]),
@@ -519,6 +527,8 @@ if __name__ == "__main__":
                             help="Der Pfad zum Verzeichnis mit den Bildern. Standard ist das aktuelle Verzeichnis.")
         parser.add_argument("--detector", type=str, default="ORB", choices=["SIFT", "ORB"],
                             help="Der zu verwendende Feature-Detektor (SIFT oder ORB). SIFT ist genauer, aber ORB ist schneller.")
+        parser.add_argument("--max-group-nr", type=int, default=6,
+                            help="Die minimale Anzahl von übereinstimmenden Merkmalen, um eine Überlappung anzunehmen (Standard: 20).")
         parser.add_argument("--min-matches", type=int, default=8,
                             help="Die minimale Anzahl von übereinstimmenden Merkmalen, um eine Überlappung anzunehmen (Standard: 20).")
 
