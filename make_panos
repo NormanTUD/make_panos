@@ -418,7 +418,10 @@ def progress_task(progress, description, **kwargs):
     try:
         progress.start_task(task_id)
         yield task_id
-        progress.update(task_id, completed=progress.tasks[task_id].total)
+        # Task sicher aus Liste finden
+        task = next(t for t in progress.tasks if t.id == task_id)
+        if task.total is not None:
+            progress.update(task_id, completed=task.total)
     except Exception:
         progress.update(task_id, description=f"[red]❌ {description}")
         raise
@@ -499,10 +502,7 @@ def group_images_in_all_subdirs(base_dir, detector, min_matches):
     original_dir = os.getcwd()  # Merke Ursprungs-Verzeichnis
 
     for root, dirs, files in os.walk(base_dir):
-        try:
-            group_images_by_overlap_and_merge_when_found(os.path.abspath(root), detector, min_matches)
-        except Exception as e:
-            console.print(f"[red]Error in {root}: {e}[/red]")
+        group_images_by_overlap_and_merge_when_found(os.path.abspath(root), detector, min_matches)
 
 if __name__ == "__main__":
     try:
