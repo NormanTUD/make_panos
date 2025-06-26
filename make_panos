@@ -342,7 +342,7 @@ def group_images_by_overlap_and_merge_when_found(directory, feature_detector="SI
     Hauptfunktion zum Gruppieren von Bildern basierend auf Überlappungen.
     """
     image_paths = []
-    console.print(Panel(f"[bold]📁 Durchsuche Verzeichnis:[/bold] [cyan]{directory}[/cyan]", title="Bilder suchen"))
+    console.print(Panel(f"[bold]Durchsuche Verzeichnis:[/bold] [cyan]{directory}[/cyan]"))
 
     for root, _, files in os.walk(directory):
         for file in files:
