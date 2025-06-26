@@ -76,6 +76,7 @@ try:
             from mypydie import dier
             from rich.table import Table
             from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
+            from contextlib import contextmanager
     except KeyboardInterrupt:
         print("You cancelled loading")
         sys.exit(0)
@@ -388,8 +389,6 @@ def run(cmd, check=True):
         print("Process failed or was cancelled")
     return None
 
-from contextlib import contextmanager
-
 @contextmanager
 def progress_task(progress, description, **kwargs):
     task_id = progress.add_task(description, **kwargs)
@@ -427,7 +426,7 @@ def stitch_image_group(images, progress, output_dir="."):
         ("pto_gen", ["pto_gen", *images, "-o", pto]),
         ("cpfind", ["cpfind", "--multirow", "-o", pto, pto]),
         ("celeste_standalone", ["celeste_standalone", "-i", pto, "-o", pto]),
-        #("autooptimiser", ["autooptimiser", "-a", "-l", "-s", "-m", "-o", pto, pto]),
+        ("autooptimiser", ["autooptimiser", "-a", "-l", "-s", "-m", "-o", pto, pto]),
         ("pano_modify", ["pano_modify", "-o", pto, "--canvas=AUTO", "--crop=AUTO", pto]),
         ("hugin_executor", ["hugin_executor", "--stitching", f"--prefix={tif_prefix}", pto]),
     ]
@@ -456,6 +455,16 @@ def stitch_image_group(images, progress, output_dir="."):
     console.print(f"[green]💾 Gespeichert:[/green] {jpg_path}")
     return jpg_path
 
+def group_images_in_all_subdirs(base_dir, detector, min_matches):
+    original_dir = os.getcwd()  # Merke Ursprungs-Verzeichnis
+
+    for root, dirs, files in os.walk(base_dir):
+        try:
+            console.print(f"i [blue]Processing directory: {root}[/blue]")
+            group_images_by_overlap_and_merge_when_found(root, detector, min_matches)
+        except Exception as e:
+            console.print(f"[red]Error in {root}: {e}[/red]")
+
 if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser(description="Gruppiert Bilder basierend auf tatsächlichen Inhaltsüberlappungen für Panorama-Stitching.")
@@ -468,6 +477,6 @@ if __name__ == "__main__":
 
         args = parser.parse_args()
 
-        group_images_by_overlap_and_merge_when_found(args.directory, args.detector, args.min_matches)
+        group_images_in_all_subdirs(args.directory, args.detector, args.min_matches)
     except KeyboardInterrupt:
-        print("You cancelled")
+        console.print("[yellow]You cancelled[/yellow]")
