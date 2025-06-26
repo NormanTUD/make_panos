@@ -220,14 +220,17 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
                     image_data[img_path] = result
 
     overlapping_pairs = {}
-    console.print("🔄 [cyan]Vergleiche Bildpaare für Überlappungen...[/cyan]")
 
     all_image_paths = list(image_data.keys())
     total_comparisons = (len(all_image_paths) * (len(all_image_paths) - 1)) // 2
     comparison_count = 0
 
     with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TimeElapsedColumn(), console=console
+        TextColumn("🔄 [cyan]Vergleiche Bildpaare für Überlappungen...[/cyan]"),
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn()
     ) as progress:
         for i in range(len(all_image_paths)):
             path1 = all_image_paths[i]
@@ -291,7 +294,6 @@ def find_connected_components(graph):
     """
     Findet zusammenhängende Komponenten in einem Graphen (Bildergruppen).
     """
-    console.print("")
 
     visited = set()
     components = []
