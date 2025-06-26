@@ -487,7 +487,6 @@ def group_images_in_all_subdirs(base_dir, detector, min_matches):
 
     for root, dirs, files in os.walk(base_dir):
         try:
-            console.print(f"[green]Processing directory: {root}[/green]")
             group_images_by_overlap_and_merge_when_found(root, detector, min_matches)
         except Exception as e:
             console.print(f"[red]Error in {root}: {e}[/red]")
