@@ -198,7 +198,7 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
     cached_subtask = load_from_cache(cache_key_subtask_image_data)
 
     if cached_subtask:
-        image_data = load_from_cache(cache_key_subtask_image_data)
+        image_data = cached_subtask
     else:
         num_workers = max(1, cpu_count() - 1)
 
