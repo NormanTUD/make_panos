@@ -1,0 +1,473 @@
+#!/bin/env python3
+
+import os
+import subprocess
+import platform
+import sys
+
+try:
+    import venv
+except ModuleNotFoundError:
+    print("venv not found. Is python3-venv installed?")
+    sys.exit(1)
+
+from pathlib import Path
+
+VENV_PATH = Path.home() / ".panorama_helper"
+PYTHON_BIN = VENV_PATH / "bin" / "python"
+
+if platform.system() == "Windows":
+    PYTHON_BIN = VENV_PATH / "Scripts" / "python.exe"
+
+def create_and_setup_venv():
+    venv.create(VENV_PATH, with_pip=True)
+    subprocess.check_call([PYTHON_BIN, "-m", "pip", "install", "--upgrade", "pip", "networkx", "rich", "opencv-python", "mypydie", "matplotlib"])
+
+def restart_with_venv():
+    try:
+        result = subprocess.run(
+            [str(PYTHON_BIN)] + sys.argv,
+            text=True,
+            check=True,
+            env=dict(**os.environ)
+        )
+        sys.exit(result.returncode)
+    except subprocess.CalledProcessError as e:
+        print("Subprocess Error:")
+        print(f"Exit-Code: {e.returncode}")
+        sys.exit(e.returncode)
+    except Exception as e:
+        print(f"Unexpected error while restarting python: {e}")
+        sys.exit(1)
+
+if not os.path.exists(VENV_PATH):
+    create_and_setup_venv()
+    restart_with_venv()
+
+try:
+    from rich.console import Console
+
+    console = Console()
+
+    try:
+        with console.status("[bold green]Loading modules..."):
+            import argparse
+            import cv2
+            import numpy as np
+            import subprocess
+            import tempfile
+            import hashlib
+            import os
+            import pickle
+            from pathlib import Path
+            from shutil import which
+            from rich.text import Text
+            from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+            from rich.progress import track
+            from rich.panel import Panel
+            from rich.progress import Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn
+            from rich import print
+            import networkx as nx
+            from PIL import Image
+            from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+            import matplotlib.pyplot as plt
+            import os
+            import uuid
+            from mypydie import dier
+            from rich.table import Table
+            from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
+    except KeyboardInterrupt:
+        print("You cancelled loading")
+        sys.exit(0)
+except ModuleNotFoundError:
+    try:
+        try:
+            if not VENV_PATH.exists():
+                create_and_setup_venv()
+        except subprocess.CalledProcessError:
+            shutil.rmtree(VENV_PATH)
+            create_and_setup_venv()
+            restart_with_venv()
+        restart_with_venv()
+    except KeyboardInterrupt:
+        print("You cancelled installation")
+        sys.exit(0)
+
+CACHE_DIR = Path.home() / ".cache" / "feature_cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+def get_cache_key(img_path, detector_name):
+    try:
+        # Optional: Änderungszeit hinzufügen, damit Cache bei Dateiänderung invalidiert wird
+        mtime = os.path.getmtime(img_path)
+    except Exception:
+        mtime = 0
+    key_str = f"{img_path}:{mtime}:{detector_name}"
+    return hashlib.md5(key_str.encode("utf-8")).hexdigest()
+
+def load_from_cache(key):
+    cache_path = CACHE_DIR / f"{key}.pkl"
+    if cache_path.exists():
+        try:
+            with open(cache_path, "rb") as f:
+                return pickle.load(f)
+        except Exception:
+            pass
+    return None
+
+def save_to_cache(key, data):
+    cache_path = CACHE_DIR / f"{key}.pkl"
+    try:
+        with open(cache_path, "wb") as f:
+            pickle.dump(data, f)
+    except Exception:
+        pass
+
+def process_image(img_path, feature_detector):
+    detector = None
+
+    if feature_detector == "SIFT":
+        try:
+            detector = cv2.SIFT_create()
+        except AttributeError:
+            from rich import print as rprint
+            rprint("[bold red]❌ SIFT nicht verfügbar.[/bold red] Versuche [green]'pip install opencv-contrib-python'[/green] oder wechsle zu ORB.")
+            rprint("🔁 Verwende stattdessen [cyan]ORB[/cyan].")
+            detector = cv2.ORB_create()
+            feature_detector = "ORB"
+    elif feature_detector == "ORB":
+        detector = cv2.ORB_create()
+    else:
+        raise ValueError("Ungültiger Feature-Detektor. Wähle 'SIFT' oder 'ORB'.")
+
+    cache_key = get_cache_key(img_path, feature_detector)
+    cached_result = load_from_cache(cache_key)
+    if cached_result:
+        return (img_path, cached_result)
+
+    try:
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return (img_path, 'load_error')
+        keypoints, descriptors = detector.detectAndCompute(img, None)
+        if keypoints is not None and descriptors is not None:
+            result = (keypoints, descriptors)
+            save_to_cache(cache_key, result)
+            return (img_path, result)
+        else:
+            return (img_path, 'no_features')
+    except Exception as e:
+        return (img_path, f'error: {e}')
+
+def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10):
+    """
+    Findet Paare von Bildern, die sich basierend auf Feature-Matching überlappen.
+
+    Args:
+    except KeyboardInterrupt:
+    print("You cancelled")
+        image_paths (list): Eine Liste von Pfaden zu den Bildern.
+        feature_detector (str): Der zu verwendende Feature-Detektor ("SIFT" oder "ORB").
+        min_matches (int): Die minimale Anzahl von übereinstimmenden Merkmalen, um eine Überlappung anzunehmen.
+
+    Returns:
+        dict: Ein Dictionary, das für jedes Bild eine Liste von Bildern enthält, mit denen es sich überlappt.
+    """
+    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True) if feature_detector == "SIFT" else cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+
+    image_data = {}
+    console.print("🔍 [yellow]Extrahiere Merkmale aus Bildern...[/yellow]")
+
+    from multiprocessing import cpu_count
+
+    num_workers = max(1, cpu_count() - 1)
+
+    with Progress(
+        TextColumn("[cyan]{task.description}"),
+        BarColumn(),
+        "[progress.percentage]{task.percentage:>3.0f}%",
+        TextColumn("({task.completed}/{task.total})"),
+        TimeElapsedColumn(),
+        TimeRemainingColumn()
+    ) as progress:
+        task = progress.add_task("[cyan]Verarbeite Bilder...", total=len(image_paths))
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        num_workers = max(1, os.cpu_count() - 1)
+
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = {executor.submit(process_image, path, feature_detector): path for path in image_paths}
+
+            for future in as_completed(futures):
+                img_path = futures[future]
+                try:
+                    _, result = future.result()
+                except Exception as e:
+                    result = f"error: {e}"
+
+                progress.advance(task)
+
+                if result == 'load_error':
+                    console.print(f"[bold yellow]⚠ Konnte Bild nicht laden:[/bold yellow] {img_path}")
+                elif result == 'no_features':
+                    console.print(f"[yellow]⚠ Keine Merkmale gefunden in:[/yellow] {img_path}")
+                elif isinstance(result, str) and result.startswith('error:'):
+                    console.print(f"[red]⚠ Fehler bei Bild:[/red] {img_path} – {result[7:]}")
+                else:
+                    image_data[img_path] = result
+
+    overlapping_pairs = {}
+    console.print("🔄 [cyan]Vergleiche Bildpaare für Überlappungen...[/cyan]")
+
+    all_image_paths = list(image_data.keys())
+    total_comparisons = (len(all_image_paths) * (len(all_image_paths) - 1)) // 2
+    comparison_count = 0
+
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TimeElapsedColumn(), console=console
+    ) as progress:
+        for i in range(len(all_image_paths)):
+            path1 = all_image_paths[i]
+            kp1, des1 = image_data[path1]
+            overlapping_pairs.setdefault(path1, set())
+
+            total_comparisons = (len(all_image_paths) * (len(all_image_paths) - 1)) // 2
+
+            comparison_count = 0
+
+            for j in range(i + 1, len(all_image_paths)):
+                path2 = all_image_paths[j]
+
+                if path1 == path2:
+                    continue
+
+                kp2, des2 = image_data[path2]
+
+                comparison_count += 1
+
+            try:
+                matches = bf.match(des1, des2)
+
+                if len(matches) >= min_matches:
+                    src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+                    dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+                    M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+                    inlier_matches_count = np.sum(mask) if mask is not None else 0
+
+                    if M is not None and inlier_matches_count >= min_matches:
+                        console.log(f"[green]  ✅ Überlappung erkannt zwischen {os.path.basename(path1)} und {os.path.basename(path2)}[/green]")
+                        overlapping_pairs[path1].add(path2)
+                        overlapping_pairs.setdefault(path2, set()).add(path1)
+
+                        # Optional: ein Dict mit Gewichten (z.B. inlier_matches_count)
+                        overlap_strength = {}
+
+                        overlap_strength[(min(path1, path2), max(path1, path2))] = inlier_matches_count
+
+                        image_pil_data = {}
+                        for img_path in all_image_paths:
+                            try:
+                                image_pil_data[img_path] = Image.open(img_path)
+                            except:
+                                pass
+                else:
+                    console.log(f"  ❌ [dim]Zu wenige Matches ({len(matches)} < {min_matches})[/dim]")
+            except cv2.error as e:
+                console.log(f"  ⚠ [red]OpenCV-Fehler:[/red] {e}")
+                continue
+            except Exception as e:
+                console.log(f"  ⚠ [red]Unerwarteter Fehler:[/red] {e}")
+                continue
+
+    return overlapping_pairs
+
+def find_connected_components(graph):
+    """
+    Findet zusammenhängende Komponenten in einem Graphen (Bildergruppen).
+    """
+    console.print("[bold blue]🔗 Suche zusammenhängende Bildergruppen (Komponenten) im Graphen der Überlappungen...[/bold blue]")
+
+    visited = set()
+    components = []
+
+    total_nodes = len(graph)
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TimeElapsedColumn(), console=console, transient=True
+    ) as progress:
+        for node in graph:
+            if node not in visited:
+                current_component = []
+                stack = [node]
+                visited.add(node)
+
+                while stack:
+                    vertex = stack.pop()
+                    current_component.append(vertex)
+
+                    for neighbor in graph.get(vertex, set()):
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            stack.append(neighbor)
+
+                components.append(current_component)
+
+                if len(current_component) > 1:
+                    console.print(Panel.fit(
+                        f"[green]📸 Stitching-Gruppe:[/green] {', '.join(os.path.basename(p) for p in current_component)}",
+                        title=f"[bold]Gruppe mit {len(current_component)} Bild(en)[/bold]",
+                        subtitle="Stitching wird gestartet...",
+                        border_style="green"
+                    ))
+                    stitch_image_group(current_component, progress)
+
+    console.print(f"[bold cyan]✅ Insgesamt {len(components)} Komponente(n) gefunden.[/bold cyan]")
+    return components
+
+def group_images_by_overlap_and_merge_when_found(directory, feature_detector="SIFT", min_matches=10):
+    """
+    Hauptfunktion zum Gruppieren von Bildern basierend auf Überlappungen.
+    """
+    image_paths = []
+    console.print(Panel(f"[bold]📁 Durchsuche Verzeichnis:[/bold] [cyan]{directory}[/cyan]", title="Bilder suchen"))
+
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')) and not file.lower().startswith("pano_"):
+                image_paths.append(os.path.join(root, file))
+
+    if not image_paths:
+        console.print(f"[bold red]❌ Keine Bilder im Verzeichnis '{directory}' gefunden.[/bold red]")
+        return []
+
+    console.print(Panel.fit(
+        f"[bold]🔍 Starte Überlappungssuche[/bold]\n[blue]Detektor:[/blue] {feature_detector}\n[blue]Minimale Matches:[/blue] {min_matches}",
+        title="Überlappungssuche"
+    ))
+
+    # Schritt 1: Finde alle Paare, die sich überlappen
+    overlapping_graph = find_overlapping_pairs(image_paths, feature_detector, min_matches)
+
+    # Schritt 2: Finde zusammenhängende Komponenten im Überlappungsgraphen
+    grouped_images = find_connected_components(overlapping_graph)
+
+    # Filter: Nur Gruppen mit mehr als einem Bild sind interessant für Panoramen
+    final_groups = [group for group in grouped_images if len(group) > 1]
+
+    if not final_groups:
+        console.print("[yellow]🤷‍♂️ Keine Gruppen überlappender Bilder (mit mehr als einem Bild) gefunden.[/yellow]")
+    else:
+        table = Table(title="Panorama-Gruppen", show_lines=True)
+        table.add_column("Gruppe", justify="right")
+        table.add_column("Bildanzahl", justify="center")
+        table.add_column("Bilder", justify="left")
+
+        for i, group in enumerate(final_groups, 1):
+            table.add_row(
+                f"[cyan]#{i}[/cyan]",
+                str(len(group)),
+                "\n".join(os.path.basename(p) for p in group)
+            )
+        console.print(f"[bold green]✨ {len(final_groups)} Panorama-Gruppen gefunden.[/bold green]")
+        console.print(table)
+
+    return final_groups
+
+def run(cmd, check=True):
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            print(f"❌ Fehler bei: {' '.join(cmd)}")
+            print(result.stderr.strip())
+            if check:
+                raise RuntimeError(f"Command failed: {' '.join(cmd)}")
+            return False
+        return True
+    except ChildProcessError as e:
+        print("Process failed or was cancelled")
+    return None
+
+from contextlib import contextmanager
+
+@contextmanager
+def progress_task(progress, description, **kwargs):
+    task_id = progress.add_task(description, **kwargs)
+    try:
+        progress.start_task(task_id)
+        yield task_id
+        progress.update(task_id, completed=progress.tasks[task_id].total)
+    except Exception:
+        progress.stop_task(task_id)
+        raise
+    progress.stop_task(task_id)
+
+def stitch_image_group(images, progress, output_dir="."):
+    if len(images) < 2:
+        console.print("❌ [red]Zu wenige Bilder für ein Panorama.[/red]")
+        return None
+
+    joined = "\n".join(images)
+    hash_str = hashlib.sha1(joined.encode()).hexdigest()
+    jpg_name = f"pano_{hash_str}.jpg"
+    jpg_path = os.path.join(output_dir, jpg_name)
+
+    dier(jpg_path)
+    if os.path.exists(jpg_path):
+        console.print(f"i [yellow]Die Datei {jpg_path} existiert bereits.[/yellow]")
+        return
+
+    tmpdir = tempfile.mkdtemp()
+    pto = os.path.join(tmpdir, f"pano_{hash_str}.pto")
+    tif_prefix = os.path.join(tmpdir, f"pano_{hash_str}")
+    images = sorted(map(str, images))
+
+    console.rule(f"🧵 Gruppe mit {len(images)} Bildern → Hash: [cyan]{hash_str}[/cyan]")
+
+    steps = [
+        ("pto_gen", ["pto_gen", *images, "-o", pto]),
+        ("cpfind", ["cpfind", "--multirow", "-o", pto, pto]),
+        ("celeste_standalone", ["celeste_standalone", "-i", pto, "-o", pto]),
+        #("autooptimiser", ["autooptimiser", "-a", "-l", "-s", "-m", "-o", pto, pto]),
+        ("pano_modify", ["pano_modify", "-o", pto, "--canvas=AUTO", "--crop=AUTO", pto]),
+        ("hugin_executor", ["hugin_executor", "--stitching", f"--prefix={tif_prefix}", pto]),
+    ]
+
+    for name, cmd in steps:
+        with progress_task(progress, f"[blue]➡ {name} ...", spinner="dots"):
+            try:
+                run(cmd, check=True)
+            except ChildProcessError:
+                progress.update(new_task, description=f"[red]❌ {name} fehlgeschlagen")
+                return None
+
+    tif_file = next(Path(tmpdir).glob(f"pano_{hash_str}*.tif"), None)
+    if not tif_file or not tif_file.exists():
+        console.print(f"[red]❌ Kein .tif gefunden unter [bold]{tmpdir}[/bold][/red]")
+        return None
+
+    try:
+        with progress_task(progress, "➡ [cyan]Konvertiere zu JPG...[/cyan]", spinner="dots"):
+            run(["convert", str(tif_file), "-quality", "92", jpg_path], check=True)
+            tif_file.unlink()
+    except ChildProcessError:
+        console.print("[red]❌ convert fehlgeschlagen[/red]")
+        return None
+
+    console.print(f"[green]💾 Gespeichert:[/green] {jpg_path}")
+    return jpg_path
+
+if __name__ == "__main__":
+    try:
+        parser = argparse.ArgumentParser(description="Gruppiert Bilder basierend auf tatsächlichen Inhaltsüberlappungen für Panorama-Stitching.")
+        parser.add_argument("directory", nargs="?", default=".", 
+                            help="Der Pfad zum Verzeichnis mit den Bildern. Standard ist das aktuelle Verzeichnis.")
+        parser.add_argument("--detector", type=str, default="ORB", choices=["SIFT", "ORB"],
+                            help="Der zu verwendende Feature-Detektor (SIFT oder ORB). SIFT ist genauer, aber ORB ist schneller.")
+        parser.add_argument("--min-matches", type=int, default=8,
+                            help="Die minimale Anzahl von übereinstimmenden Merkmalen, um eine Überlappung anzunehmen (Standard: 20).")
+
+        args = parser.parse_args()
+
+        group_images_by_overlap_and_merge_when_found(args.directory, args.detector, args.min_matches)
+    except KeyboardInterrupt:
+        print("You cancelled")
