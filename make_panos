@@ -191,43 +191,52 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
 
     image_data = {}
 
-    num_workers = max(1, cpu_count() - 1)
+    cache_key_subtask_image_data = f"{cache_key}_image_data"
 
-    with Progress(
-        TextColumn("🔍 [yellow]Extrahiere Merkmale aus Bildern:[/yellow] [cyan]{task.description}"),
-        BarColumn(),
-        "[progress.percentage]{task.percentage:>3.0f}%",
-        TextColumn("({task.completed}/{task.total})"),
-        TimeElapsedColumn(),
-        TimeRemainingColumn(),
-        transient=True
-    ) as progress:
-        task = progress.add_task("[cyan]Verarbeite Bilder...", total=len(image_paths))
+    cached_subtask = load_from_cache(cache_key_subtask_image_data)
 
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+    if cached_subtask:
+        image_data = load_from_cache(cache_key_subtask_image_data)
+    else:
+        num_workers = max(1, cpu_count() - 1)
 
-        num_workers = max(1, os.cpu_count())
+        with Progress(
+            TextColumn("🔍 [yellow]Extrahiere Merkmale aus Bildern:[/yellow] [cyan]{task.description}"),
+            BarColumn(),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            TextColumn("({task.completed}/{task.total})"),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
+            transient=True
+        ) as progress:
+            task = progress.add_task("[cyan]Verarbeite Bilder...", total=len(image_paths))
 
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(process_image, path, feature_detector): path for path in image_paths}
+            from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            for future in as_completed(futures):
-                img_path = futures[future]
-                try:
-                    _, result = future.result()
-                except Exception as e:
-                    result = f"error: {e}"
+            num_workers = max(1, os.cpu_count())
 
-                progress.advance(task)
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                futures = {executor.submit(process_image, path, feature_detector): path for path in image_paths}
 
-                if result == 'load_error':
-                    console.print(f"[bold yellow]⚠ Konnte Bild nicht laden:[/bold yellow] {img_path}")
-                elif result == 'no_features':
-                    console.print(f"[yellow]⚠ Keine Merkmale gefunden in:[/yellow] {img_path}")
-                elif isinstance(result, str) and result.startswith('error:'):
-                    console.print(f"[red]⚠ Fehler bei Bild:[/red] {img_path} – {result[7:]}")
-                else:
-                    image_data[img_path] = result
+                for future in as_completed(futures):
+                    img_path = futures[future]
+                    try:
+                        _, result = future.result()
+                    except Exception as e:
+                        result = f"error: {e}"
+
+                    progress.advance(task)
+
+                    if result == 'load_error':
+                        console.print(f"[bold yellow]⚠ Konnte Bild nicht laden:[/bold yellow] {img_path}")
+                    elif result == 'no_features':
+                        console.print(f"[yellow]⚠ Keine Merkmale gefunden in:[/yellow] {img_path}")
+                    elif isinstance(result, str) and result.startswith('error:'):
+                        console.print(f"[red]⚠ Fehler bei Bild:[/red] {img_path} – {result[7:]}")
+                    else:
+                        image_data[img_path] = result
+
+        save_to_cache(cache_key_subtask_image_data, image_data)
 
     overlapping_pairs = {}
 
