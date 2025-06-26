@@ -408,9 +408,10 @@ def progress_task(progress, description, **kwargs):
         yield task_id
         progress.update(task_id, completed=progress.tasks[task_id].total)
     except Exception:
-        progress.stop_task(task_id)
+        progress.update(task_id, description=f"[red]❌ {description}")
         raise
-    progress.stop_task(task_id)
+    finally:
+        progress.remove_task(task_id)
 
 def has_control_points(pto_path):
     try:
