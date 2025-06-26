@@ -33,7 +33,6 @@ def restart_with_venv():
         )
         sys.exit(result.returncode)
     except subprocess.CalledProcessError as e:
-        print("Subprocess Error:")
         print(f"Exit-Code: {e.returncode}")
         sys.exit(e.returncode)
     except Exception as e:
