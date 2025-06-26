@@ -179,10 +179,8 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
     """
 
     serialized = json.dumps([image_paths, feature_detector, min_matches], sort_keys=True)
-    serialized_subtask = json.dumps([image_paths, feature_detector], sort_keys=True)
 
     cache_key = hashlib.md5(serialized.encode('utf-8')).hexdigest()
-    cache_key_subtask = hashlib.md5(serialized_subtask.encode('utf-8')).hexdigest()
 
     cached = load_from_cache(cache_key)
 
@@ -193,12 +191,13 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
 
     image_data = {}
 
-    cache_key_subtask_image_data = f"{cache_key_subtask}_image_data"
+    serialized_subtask = json.dumps([image_paths, feature_detector], sort_keys=True)
+    cache_key_subtask = hashlib.md5(serialized_subtask.encode('utf-8')).hexdigest()
 
-    cached_subtask = load_from_cache(cache_key_subtask_image_data)
+    cached_subtask_loaded = load_from_cache(cache_key_subtask)
 
-    if cached_subtask:
-        image_data = cached_subtask
+    if cached_subtask_loaded:
+        image_data = cached_subtask_loaded
     else:
         num_workers = max(1, cpu_count() - 1)
 
@@ -238,7 +237,7 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
                     else:
                         image_data[img_path] = result
 
-        save_to_cache(cache_key_subtask_image_data, image_data)
+        save_to_cache(cache_key_subtask, image_data)
 
     overlapping_pairs = {}
 
