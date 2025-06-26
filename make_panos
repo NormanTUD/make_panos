@@ -48,40 +48,39 @@ try:
 
     console = Console()
 
-    try:
-        with console.status("[bold green]Loading modules..."):
-            import argparse
-            import cv2
-            import json
-            import numpy as np
-            import subprocess
-            import tempfile
-            import hashlib
-            import os
-            import pickle
-            from pathlib import Path
-            from shutil import which
-            from rich.text import Text
-            from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
-            from rich.progress import track
-            from rich.panel import Panel
-            from rich.progress import Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn
-            from rich import print
-            import networkx as nx
-            from PIL import Image
-            from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-            import matplotlib.pyplot as plt
-            import os
-            import uuid
-            from mypydie import dier
-            from rich.table import Table
-            from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
-            from contextlib import contextmanager
-            import shlex
-            from multiprocessing import cpu_count
-    except KeyboardInterrupt:
-        print("You cancelled loading")
-        sys.exit(0)
+    with console.status("[bold green]Loading modules..."):
+        import argparse
+        import cv2
+        import json
+        import numpy as np
+        import subprocess
+        import tempfile
+        import hashlib
+        import os
+        import pickle
+        from pathlib import Path
+        from shutil import which
+        from rich.text import Text
+        from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+        from rich.progress import track
+        from rich.panel import Panel
+        from rich.progress import Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn
+        from rich import print
+        import networkx as nx
+        from PIL import Image
+        from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+        import matplotlib.pyplot as plt
+        import os
+        import uuid
+        from mypydie import dier
+        from rich.table import Table
+        from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
+        from contextlib import contextmanager
+        import shlex
+        from multiprocessing import cpu_count
+except KeyboardInterrupt:
+    print("You cancelled loading")
+    sys.exit(0)
 except ModuleNotFoundError:
     try:
         try:
