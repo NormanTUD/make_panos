@@ -251,6 +251,9 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
             try:
                 matches = bf.match(des1, des2)
 
+                if path1 == path2:
+                    continue
+
                 if len(matches) >= min_matches:
                     src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
                     dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
@@ -288,14 +291,19 @@ def find_connected_components(graph):
     """
     Findet zusammenhängende Komponenten in einem Graphen (Bildergruppen).
     """
-    console.print("[bold blue]🔗 Suche zusammenhängende Bildergruppen (Komponenten) im Graphen der Überlappungen...[/bold blue]")
+    console.print("")
 
     visited = set()
     components = []
 
     total_nodes = len(graph)
     with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TimeElapsedColumn(), console=console, transient=True
+        TextColumn("[bold blue]🔗 Suche zusammenhängende Bildergruppen (Komponenten) im Graphen der Überlappungen...[/bold blue]"),
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        transient=True
     ) as progress:
         for node in graph:
             if node not in visited:
