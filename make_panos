@@ -77,6 +77,7 @@ try:
             from rich.table import Table
             from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
             from contextlib import contextmanager
+            import shlex
     except KeyboardInterrupt:
         print("You cancelled loading")
         sys.exit(0)
@@ -401,6 +402,13 @@ def progress_task(progress, description, **kwargs):
         raise
     progress.stop_task(task_id)
 
+def has_control_points(pto_path):
+    try:
+        with open(pto_path) as f:
+            return any(line.startswith("c ") for line in f)
+    except Exception:
+        return False
+
 def stitch_image_group(images, progress, output_dir="."):
     if len(images) < 2:
         console.print("❌ [red]Zu wenige Bilder für ein Panorama.[/red]")
@@ -425,8 +433,17 @@ def stitch_image_group(images, progress, output_dir="."):
     steps = [
         ("pto_gen", ["pto_gen", *images, "-o", pto]),
         ("cpfind", ["cpfind", "--multirow", "-o", pto, pto]),
-        ("celeste_standalone", ["celeste_standalone", "-i", pto, "-o", pto]),
-        ("autooptimiser", ["autooptimiser", "-a", "-l", "-s", "-m", "-o", pto, pto]),
+    ]
+
+    if has_control_points(pto):
+        steps += [
+            ("autooptimiser", ["autooptimiser", "-a", "-l", "-s", "-m", "-o", pto, pto]),
+            ("celeste_standalone", ["celeste_standalone", "-i", pto, "-o", pto]),
+        ]
+    else:
+        print("⚠️  Warning: No control points found in PTO file, skipping autooptimiser + celeste.")
+
+    steps += [
         ("pano_modify", ["pano_modify", "-o", pto, "--canvas=AUTO", "--crop=AUTO", pto]),
         ("hugin_executor", ["hugin_executor", "--stitching", f"--prefix={tif_prefix}", pto]),
     ]
