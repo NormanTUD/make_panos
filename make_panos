@@ -300,7 +300,7 @@ def find_connected_components(graph):
 
     total_nodes = len(graph)
     with Progress(
-        TextColumn("[bold green]🔗 Suche zusammenhängende Bildergruppen (Komponenten) im Graphen der Überlappungen...[/bold green]"),
+        TextColumn("[bold green]🔗 Suche zusammenhängende Bildergruppen und füge sie zusammen...[/bold green]"),
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
