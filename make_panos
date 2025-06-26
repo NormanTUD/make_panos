@@ -78,6 +78,7 @@ try:
             from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
             from contextlib import contextmanager
             import shlex
+            from multiprocessing import cpu_count
     except KeyboardInterrupt:
         print("You cancelled loading")
         sys.exit(0)
@@ -179,19 +180,17 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True) if feature_detector == "SIFT" else cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
     image_data = {}
-    console.print("🔍 [yellow]Extrahiere Merkmale aus Bildern...[/yellow]")
-
-    from multiprocessing import cpu_count
 
     num_workers = max(1, cpu_count() - 1)
 
     with Progress(
-        TextColumn("[cyan]{task.description}"),
+        TextColumn("🔍 [yellow]Extrahiere Merkmale aus Bildern:[/yellow] [cyan]{task.description}"),
         BarColumn(),
         "[progress.percentage]{task.percentage:>3.0f}%",
         TextColumn("({task.completed}/{task.total})"),
         TimeElapsedColumn(),
-        TimeRemainingColumn()
+        TimeRemainingColumn(),
+        transient=True
     ) as progress:
         task = progress.add_task("[cyan]Verarbeite Bilder...", total=len(image_paths))
 
