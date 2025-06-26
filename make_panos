@@ -97,6 +97,7 @@ CACHE_DIR = Path.home() / ".cache" / "feature_cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_cache_key(img_path, detector_name):
+    img_path = os.path.abspath(img_path)
     try:
         # Optional: Änderungszeit hinzufügen, damit Cache bei Dateiänderung invalidiert wird
         mtime = os.path.getmtime(img_path)
