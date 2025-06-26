@@ -495,7 +495,6 @@ def stitch_image_group(images, progress, output_dir="."):
         console.print("[red]❌ convert fehlgeschlagen[/red]")
         return None
 
-    console.print(f"[green]💾 Gespeichert:[/green] {jpg_path}")
     return jpg_path
 
 def group_images_in_all_subdirs(base_dir, detector, min_matches):
