@@ -179,8 +179,10 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
     """
 
     serialized = json.dumps([image_paths, feature_detector, min_matches], sort_keys=True)
+    serialized_subtask = json.dumps([image_paths, feature_detector], sort_keys=True)
 
     cache_key = hashlib.md5(serialized.encode('utf-8')).hexdigest()
+    cache_key_subtask = hashlib.md5(serialized_subtask.encode('utf-8')).hexdigest()
 
     cached = load_from_cache(cache_key)
 
@@ -191,7 +193,7 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
 
     image_data = {}
 
-    cache_key_subtask_image_data = f"{cache_key}_image_data"
+    cache_key_subtask_image_data = f"{cache_key_subtask}_image_data"
 
     cached_subtask = load_from_cache(cache_key_subtask_image_data)
 
