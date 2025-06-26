@@ -53,6 +53,7 @@ try:
         with console.status("[bold green]Loading modules..."):
             import argparse
             import cv2
+            import json
             import numpy as np
             import subprocess
             import tempfile
@@ -177,6 +178,16 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
     Returns:
         dict: Ein Dictionary, das für jedes Bild eine Liste von Bildern enthält, mit denen es sich überlappt.
     """
+
+    serialized = json.dumps([image_paths, feature_detector, min_matches], sort_keys=True)
+
+    cache_key = hashlib.md5(serialized.encode('utf-8')).hexdigest()
+
+    cached = load_from_cache(cache_key)
+
+    if cached:
+        return cached
+
     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True) if feature_detector == "SIFT" else cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
     image_data = {}
@@ -287,6 +298,8 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
             except Exception as e:
                 console.log(f"  ⚠ [red]Unerwarteter Fehler:[/red] {e}")
                 continue
+
+    save_to_cache(cache_key, overlapping_pairs)
 
     return overlapping_pairs
 
