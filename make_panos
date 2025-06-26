@@ -93,7 +93,7 @@ except ModuleNotFoundError:
             restart_with_venv()
         restart_with_venv()
     except KeyboardInterrupt:
-        print("You cancelled installation")
+        print("You cancelled")
         sys.exit(0)
 
 CACHE_DIR = Path.home() / ".cache" / "feature_cache"
