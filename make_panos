@@ -112,12 +112,42 @@ def get_cache_key(img_path, detector_name):
     key_str = f"{img_path}:{mtime}:{detector_name}"
     return hashlib.md5(key_str.encode("utf-8")).hexdigest()
 
+def serialize_keypoints(keypoints):
+    return [
+        (kp.pt, kp.size, kp.angle, kp.response, kp.octave, kp.class_id)
+        for kp in keypoints
+    ]
+
+def deserialize_keypoints(data):
+    return [
+        cv2.KeyPoint(
+            x=pt[0], y=pt[1], _size=size, _angle=angle,
+            _response=response, _octave=octave, _class_id=class_id
+        )
+        for pt, size, angle, response, octave, class_id in data
+    ]
+
 def load_from_cache(key):
     cache_path = CACHE_DIR / f"{key}.pkl"
     if cache_path.exists():
         try:
             with open(cache_path, "rb") as f:
                 return pickle.load(f)
+        except Exception:
+            pass
+    return None
+
+def save_keypoints_to_cache(key, keypoints, descriptors):
+    serialized_keypoints = serialize_keypoints(keypoints)
+    save_to_cache(key, (serialized_keypoints, descriptors))
+
+def load_keypoints_from_cache(key):
+    cached = load_from_cache(key)
+    if cached is not None:
+        try:
+            keypoints_data, descriptors = cached
+            keypoints = deserialize_keypoints(keypoints_data)
+            return (keypoints, descriptors)
         except Exception:
             pass
     return None
@@ -148,7 +178,7 @@ def process_image(img_path, feature_detector):
         raise ValueError("Ungültiger Feature-Detektor. Wähle 'SIFT' oder 'ORB'.")
 
     cache_key = get_cache_key(img_path, feature_detector)
-    cached_result = load_from_cache(cache_key)
+    cached_result = load_keypoints_from_cache(cache_key)
     if cached_result:
         return (img_path, cached_result)
 
@@ -159,7 +189,7 @@ def process_image(img_path, feature_detector):
         keypoints, descriptors = detector.detectAndCompute(img, None)
         if keypoints is not None and descriptors is not None:
             result = (keypoints, descriptors)
-            save_to_cache(cache_key, result)
+            save_keypoints_to_cache(cache_key, keypoints, descriptors)
             return (img_path, result)
         else:
             return (img_path, 'no_features')
