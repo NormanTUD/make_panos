@@ -243,7 +243,7 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
             TimeRemainingColumn(),
             transient=True
         ) as progress:
-            task = progress.add_task("[cyan]Verarbeite Bilder...", total=len(image_paths))
+            task = progress.add_task("[cyan]Verarbeite Bilder... ", total=len(image_paths))
 
             from concurrent.futures import ThreadPoolExecutor, as_completed
 
