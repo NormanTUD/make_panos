@@ -121,8 +121,7 @@ def serialize_keypoints(keypoints):
 def deserialize_keypoints(data):
     return [
         cv2.KeyPoint(
-            x=pt[0], y=pt[1], _size=size, _angle=angle,
-            _response=response, _octave=octave, _class_id=class_id
+            pt[0], pt[1], size, angle, response, octave, class_id
         )
         for pt, size, angle, response, octave, class_id in data
     ]
@@ -144,21 +143,15 @@ def save_keypoints_to_cache(key, keypoints, descriptors):
 def load_keypoints_from_cache(key):
     cached = load_from_cache(key)
     if cached is not None:
-        try:
-            keypoints_data, descriptors = cached
-            keypoints = deserialize_keypoints(keypoints_data)
-            return (keypoints, descriptors)
-        except Exception:
-            pass
+        keypoints_data, descriptors = cached
+        keypoints = deserialize_keypoints(keypoints_data)
+        return (keypoints, descriptors)
     return None
 
 def save_to_cache(key, data):
     cache_path = CACHE_DIR / f"{key}.pkl"
-    try:
-        with open(cache_path, "wb") as f:
-            pickle.dump(data, f)
-    except Exception:
-        pass
+    with open(cache_path, "wb") as f:
+        pickle.dump(data, f)
 
 def process_image(img_path, feature_detector):
     detector = None
@@ -225,52 +218,44 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
     image_data = {}
 
     serialized_subtask = json.dumps([image_paths, feature_detector], sort_keys=True)
-    cache_key_subtask = hashlib.md5(serialized_subtask.encode('utf-8')).hexdigest()
 
-    cached_subtask_loaded = load_from_cache(cache_key_subtask)
+    num_workers = max(1, cpu_count() - 1)
 
-    if cached_subtask_loaded:
-        image_data = cached_subtask_loaded
-    else:
-        num_workers = max(1, cpu_count() - 1)
+    with Progress(
+        TextColumn("🔍 [yellow]Extrahiere Merkmale aus Bildern:[/yellow] [cyan]{task.description}"),
+        BarColumn(),
+        "[progress.percentage]{task.percentage:>3.0f}%",
+        TextColumn("({task.completed}/{task.total})"),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        transient=True
+    ) as progress:
+        task = progress.add_task("[cyan]Verarbeite Bilder... ", total=len(image_paths))
 
-        with Progress(
-            TextColumn("🔍 [yellow]Extrahiere Merkmale aus Bildern:[/yellow] [cyan]{task.description}"),
-            BarColumn(),
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            TextColumn("({task.completed}/{task.total})"),
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
-            transient=True
-        ) as progress:
-            task = progress.add_task("[cyan]Verarbeite Bilder... ", total=len(image_paths))
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            from concurrent.futures import ThreadPoolExecutor, as_completed
+        num_workers = max(1, os.cpu_count())
 
-            num_workers = max(1, os.cpu_count())
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = {executor.submit(process_image, path, feature_detector): path for path in image_paths}
 
-            with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                futures = {executor.submit(process_image, path, feature_detector): path for path in image_paths}
+            for future in as_completed(futures):
+                img_path = futures[future]
+                try:
+                    _, result = future.result()
+                except Exception as e:
+                    result = f"error: {e}"
 
-                for future in as_completed(futures):
-                    img_path = futures[future]
-                    try:
-                        _, result = future.result()
-                    except Exception as e:
-                        result = f"error: {e}"
+                progress.advance(task)
 
-                    progress.advance(task)
-
-                    if result == 'load_error':
-                        console.print(f"[bold yellow]⚠ Konnte Bild nicht laden:[/bold yellow] {img_path}")
-                    elif result == 'no_features':
-                        console.print(f"[yellow]⚠ Keine Merkmale gefunden in:[/yellow] {img_path}")
-                    elif isinstance(result, str) and result.startswith('error:'):
-                        console.print(f"[red]⚠ Fehler bei Bild:[/red] {img_path} – {result[7:]}")
-                    else:
-                        image_data[img_path] = result
-
-        save_to_cache(cache_key_subtask, image_data)
+                if result == 'load_error':
+                    console.print(f"[bold yellow]⚠ Konnte Bild nicht laden:[/bold yellow] {img_path}")
+                elif result == 'no_features':
+                    console.print(f"[yellow]⚠ Keine Merkmale gefunden in:[/yellow] {img_path}")
+                elif isinstance(result, str) and result.startswith('error:'):
+                    console.print(f"[red]⚠ Fehler bei Bild:[/red] {img_path} – {result[7:]}")
+                else:
+                    image_data[img_path] = result
 
     overlapping_pairs = {}
 
@@ -283,7 +268,8 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
-        TimeElapsedColumn()
+        TimeElapsedColumn(),
+        transient=True
     ) as progress:
         for i in range(len(all_image_paths)):
             path1 = all_image_paths[i]
@@ -318,6 +304,8 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
 
                     if M is not None and inlier_matches_count >= min_matches:
                         console.log(f"[green]  ✅ Überlappung erkannt zwischen {os.path.basename(path1)} und {os.path.basename(path2)}[/green]")
+                        if args.max_group_nr is not None and args.max_group_nr != 0 and len(overlapping_pairs.keys()) > (args.max_group_nr + 1):
+                            continue
                         overlapping_pairs[path1].add(path2)
                         overlapping_pairs.setdefault(path2, set()).add(path1)
 
