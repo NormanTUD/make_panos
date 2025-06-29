@@ -194,37 +194,40 @@ def process_image(img_path, feature_detector):
     except Exception as e:
         return (img_path, f'error: {e}')
 
-def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10):
-    """
-    Findet Paare von Bildern, die sich basierend auf Feature-Matching überlappen.
+def get_image_timestamp(path):
+    try:
+        from PIL import Image
+        img = Image.open(path)
+        exif = img._getexif()
+        if exif:
+            date = exif.get(36867) or exif.get(306)
+            if date:
+                from datetime import datetime
+                return datetime.strptime(date, "%Y:%m:%d %H:%M:%S").timestamp()
+    except Exception:
+        pass
+    return os.path.getmtime(path)
 
-    Args:
-    except KeyboardInterrupt:
-    print("You cancelled")
-        image_paths (list): Eine Liste von Pfaden zu den Bildern.
-        feature_detector (str): Der zu verwendende Feature-Detektor ("SIFT" oder "ORB").
-        min_matches (int): Die minimale Anzahl von übereinstimmenden Merkmalen, um eine Überlappung anzunehmen.
+def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10, consecutive=False):
+    import cv2, os, json, hashlib
+    import numpy as np
+    from multiprocessing import cpu_count
+    from rich.progress import Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn, TextColumn
+    from rich.console import Console
+    from PIL import Image
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    Returns:
-        dict: Ein Dictionary, das für jedes Bild eine Liste von Bildern enthält, mit denen es sich überlappt.
-    """
+    console = Console()
 
-    serialized = json.dumps([image_paths, feature_detector, min_matches], sort_keys=True)
-
+    # Caching
+    serialized = json.dumps([image_paths, feature_detector, min_matches, consecutive], sort_keys=True)
     cache_key = hashlib.md5(serialized.encode('utf-8')).hexdigest()
-
     cached = load_from_cache(cache_key)
-
     if cached:
         return cached
 
     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True) if feature_detector == "SIFT" else cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-
     image_data = {}
-
-    serialized_subtask = json.dumps([image_paths, feature_detector], sort_keys=True)
-
-    num_workers = max(1, cpu_count() - 1)
 
     with Progress(
         TextColumn("🔍 [yellow]Extrahiere Merkmale aus Bildern:[/yellow] [cyan]{task.description}"),
@@ -262,45 +265,24 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
                 else:
                     image_data[img_path] = result
 
-    overlapping_pairs = {}
-
+    # Optional: Nur benachbarte vergleichen
     all_image_paths = list(image_data.keys())
-    total_comparisons = (len(all_image_paths) * (len(all_image_paths) - 1)) // 2
-    comparison_count = 0
+    if consecutive:
+        all_image_paths.sort(key=lambda p: (get_image_timestamp(p), os.path.basename(p)))
 
-    with Progress(
-        TextColumn("🔄 [cyan]Vergleiche Bildpaare für Überlappungen...[/cyan]"),
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TimeElapsedColumn(),
-        transient=True
-    ) as progress:
-        for i in range(len(all_image_paths)):
-            path1 = all_image_paths[i]
-            kp1, des1 = image_data[path1]
-            overlapping_pairs.setdefault(path1, set())
+    overlapping_pairs = {}
+    for i in range(len(all_image_paths)):
+        path1 = all_image_paths[i]
+        kp1, des1 = image_data[path1]
+        overlapping_pairs.setdefault(path1, set())
 
-            total_comparisons = (len(all_image_paths) * (len(all_image_paths) - 1)) // 2
-
-            comparison_count = 0
-
-            for j in range(i + 1, len(all_image_paths)):
-                path2 = all_image_paths[j]
-
-                if path1 == path2:
-                    continue
-
-                kp2, des2 = image_data[path2]
-
-                comparison_count += 1
+        compare_indices = [i+1] if consecutive and i+1 < len(all_image_paths) else range(i+1, len(all_image_paths))
+        for j in compare_indices:
+            path2 = all_image_paths[j]
+            kp2, des2 = image_data[path2]
 
             try:
                 matches = bf.match(des1, des2)
-
-                if path1 == path2:
-                    continue
-
                 if len(matches) >= min_matches:
                     src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
                     dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
@@ -309,33 +291,15 @@ def find_overlapping_pairs(image_paths, feature_detector="SIFT", min_matches=10)
 
                     if M is not None and inlier_matches_count >= min_matches:
                         console.log(f"[green]  ✅ Überlappung erkannt zwischen {os.path.basename(path1)} und {os.path.basename(path2)}[/green]")
-                        if args.max_group_nr is not None and args.max_group_nr != 0 and len(overlapping_pairs.keys()) > (args.max_group_nr + 1):
-                            continue
                         overlapping_pairs[path1].add(path2)
                         overlapping_pairs.setdefault(path2, set()).add(path1)
-
-                        # Optional: ein Dict mit Gewichten (z.B. inlier_matches_count)
-                        overlap_strength = {}
-
-                        overlap_strength[(min(path1, path2), max(path1, path2))] = inlier_matches_count
-
-                        image_pil_data = {}
-                        for img_path in all_image_paths:
-                            try:
-                                image_pil_data[img_path] = Image.open(img_path)
-                            except:
-                                pass
                 else:
                     console.log(f"  ❌ [dim]Zu wenige Matches ({len(matches)} < {min_matches})[/dim]")
-            except cv2.error as e:
-                console.log(f"  ⚠ [red]OpenCV-Fehler:[/red] {e}")
-                continue
             except Exception as e:
-                console.log(f"  ⚠ [red]Unerwarteter Fehler:[/red] {e}")
+                console.log(f"  ⚠ [red]Fehler bei Vergleich {path1} vs {path2}:[/red] {e}")
                 continue
 
     save_to_cache(cache_key, overlapping_pairs)
-
     return overlapping_pairs
 
 def find_connected_components(graph):
@@ -385,7 +349,7 @@ def find_connected_components(graph):
     console.print(f"[bold cyan]✅ Insgesamt {len(components)} Komponente(n) gefunden.[/bold cyan]")
     return components
 
-def group_images_by_overlap_and_merge_when_found(directory, feature_detector="SIFT", min_matches=10):
+def group_images_by_overlap_and_merge_when_found(directory, feature_detector="SIFT", min_matches=10, consecutive=False):
     """
     Hauptfunktion zum Gruppieren von Bildern basierend auf Überlappungen.
     """
@@ -407,7 +371,7 @@ def group_images_by_overlap_and_merge_when_found(directory, feature_detector="SI
     ))
 
     # Schritt 1: Finde alle Paare, die sich überlappen
-    overlapping_graph = find_overlapping_pairs(image_paths, feature_detector, min_matches)
+    overlapping_graph = find_overlapping_pairs(image_paths, feature_detector, min_matches, consecutive)
 
     # Schritt 2: Finde zusammenhängende Komponenten im Überlappungsgraphen
     grouped_images = find_connected_components(overlapping_graph)
@@ -537,11 +501,11 @@ def stitch_image_group(images, progress, output_dir="."):
 
     return jpg_path
 
-def group_images_in_all_subdirs(base_dir, detector, min_matches):
+def group_images_in_all_subdirs(base_dir, detector, min_matches, consecutive=False):
     original_dir = os.getcwd()  # Merke Ursprungs-Verzeichnis
 
     for root, dirs, files in os.walk(base_dir):
-        group_images_by_overlap_and_merge_when_found(os.path.abspath(root), detector, min_matches)
+        group_images_by_overlap_and_merge_when_found(os.path.abspath(root), detector, min_matches, consecutive)
 
 if __name__ == "__main__":
     try:
@@ -554,9 +518,10 @@ if __name__ == "__main__":
                             help="Die minimale Anzahl von übereinstimmenden Merkmalen, um eine Überlappung anzunehmen (Standard: 20).")
         parser.add_argument("--min-matches", type=int, default=8,
                             help="Die minimale Anzahl von übereinstimmenden Merkmalen, um eine Überlappung anzunehmen (Standard: 20).")
+        parser.add_argument("--consecutive", action="store_true", help="Nur aufeinanderfolgende Bilder vergleichen (nach Zeit und Dateiname sortiert)")
 
         args = parser.parse_args()
 
-        group_images_in_all_subdirs(args.directory, args.detector, args.min_matches)
+        group_images_in_all_subdirs(args.directory, args.detector, args.min_matches, args.consecutive)
     except KeyboardInterrupt:
         console.print("[yellow]You cancelled[/yellow]")
