@@ -337,6 +337,7 @@ def find_connected_components(graph):
                 components.append(current_component)
 
                 if len(current_component) > 1:
+                    console.print("")
                     console.print(Panel.fit(
                         f"[green]📸 Stitching-Gruppe:[/green] {', '.join(os.path.basename(p) for p in current_component)}",
                         title=f"[bold]Gruppe mit {len(current_component)} Bild(en)[/bold]",
