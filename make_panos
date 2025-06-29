@@ -454,6 +454,7 @@ def stitch_image_group(images, progress, output_dir="."):
     tif_prefix = os.path.join(tmpdir, f"pano_{hash_str}")
     images = sorted(map(str, images))
 
+    console.print("")
     console.rule(f"🧵 Gruppe mit {len(images)} Bildern → Hash: [cyan]{hash_str}[/cyan]")
 
     if args.max_group_nr < len(images):
