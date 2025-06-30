@@ -359,7 +359,7 @@ def group_images_by_overlap_and_merge_when_found(directory, feature_detector="SI
 
     for root, _, files in os.walk(directory):
         for file in files:
-            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')): # and not file.lower().startswith("pano_"):
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')) and not file.lower().startswith("pano_"):
                 image_paths.append(os.path.join(root, file))
 
     if not image_paths:
